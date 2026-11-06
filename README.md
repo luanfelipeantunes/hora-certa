@@ -1,72 +1,75 @@
-# ⏰ HORA CERTA - DOCUMENTAÇÃO DO REPOSITÓRIO
+# ⏰ Hora Certa
 
-# Hora Certa
+O Hora Certa é um aplicativo (React Native + Expo) que ajuda idosos a tomar o remédio certo na hora certa.
 
-O Hora Certa é um aplicativo móvel desenvolvido em React Native com Expo, projetado especificamente para atuar como um gerenciador e despertador infalível de medicamentos. 
-
-Ao contrário de aplicativos de lembretes convencionais que enviam apenas notificações simples (fáceis de ignorar ou limpar), o Hora Certa comporta-se como um despertador nativo real: emite som contínuo em loop e bloqueia o descarte da notificação até que o usuário interaja e confirme que tomou o medicamento.
+O enfermeiro ou médico cadastra cada remédio com uma **forma geométrica** e uma **cor** e desenha o mesmo símbolo na caixa do remédio. Na hora de tomar, o celular **toca como um despertador** e mostra, em tela cheia, o símbolo da caixa que deve ser pega.
 
 --------------------------------------------------------------------------------
-🚀 FUNCIONALIDADES PRINCIPAIS
+🚀 FUNCIONALIDADES
 --------------------------------------------------------------------------------
 
-* Despertador Contínuo & Persistente: Som em loop contínuo e notificações fixas (ongoing) que não podem ser descartadas ao arrastar para o lado, garantindo o alerta efetivo do paciente.
-* Modo Ecrã Inteiro (Full-Screen Intent): Capacidade de acordar o dispositivo, acender o ecrã bloqueado e abrir diretamente a aplicação na tela de alerta do medicamento atual (/alertScreen).
-* Navegação Inteligente Baseada no Ciclo de Vida: Sistema avançado de sincronização (useRootNavigationState + AppState) que intercepta o alarme e garante o redirecionamento imediato para o alerta, funcionando perfeitamente em:
-  - Cold Start: Quando a aplicação está totalmente fechada e é iniciada do zero por um alarme.
-  - Background: Quando a aplicação está minimizada no histórico de apps recentes.
-  - Foreground: Quando a aplicação já está aberta e em uso ativo.
-* Gerenciamento Inteligente de Alarmes (Anti-Crash Android): Algoritmo de sincronização otimizado que limita o agendamento para, no máximo, as próximas 30 doses futuras, evitando que a aplicação estoure o limite de segurança de 500 alarmes concorrentes do sistema operacional.
-* Persistência Local (Offline): Todo o histórico de medicamentos e logs de uso são mantidos de forma segura no próprio dispositivo utilizando AsyncStorage.
-* Identificação Visual Rápida: Exibição dinâmica do formato e da cor customizada do medicamento para facilitar o reconhecimento visual por parte do utilizador.
+* **Despertador de verdade (Android):** som próprio no volume de ALARME (toca mesmo no modo silencioso), repete até a confirmação, acende a tela e abre o alerta por cima da tela de bloqueio.
+* **Tela de alerta simples:** símbolo grande, nome, como tomar, "Pegue a caixa com a estrela vermelha", botão **JÁ TOMEI** e **Lembrar em 10 minutos**.
+* **Vários remédios no mesmo horário** viram um único alarme, com todos na mesma tela.
+* **Horários fixos:** "a cada 8 horas a partir de 08:00" = 08:00, 16:00, 00:00. Confirmar atrasado não empurra os próximos horários.
+* **Tratamento por alguns dias ou uso contínuo.**
+* **6 formas × 8 cores**, com aviso se dois remédios em uso tiverem o mesmo símbolo.
+* **Tela "Hoje":** próximo remédio, doses do dia (tomado / não confirmado) e confirmação antecipada.
+* **Editar e excluir remédios** (com confirmação).
+* **Aba Ajustes:** verifica o que impede o alarme de tocar (notificações, alarme exato, tela cheia, economia de bateria, volume do alarme) e tem o botão **Testar o alarme**.
+* **Funciona offline:** tudo fica salvo no aparelho (AsyncStorage).
+* Fonte Atkinson Hyperlegible (feita para pessoas com baixa visão), textos e botões grandes.
+
+Detalhes técnicos do alarme: [docs/medication-notifications.md](docs/medication-notifications.md).
 
 --------------------------------------------------------------------------------
-🛠️ TECNOLOGIAS UTILIZADAS
+🛠️ TECNOLOGIAS
 --------------------------------------------------------------------------------
 
-* Framework Principal: React Native (https://reactnative.dev/)
-* Ambiente & Roteamento: Expo (https://expo.dev/) (Expo Router, Expo Dev Client)
-* Motor de Notificações e Alarmes Nativo: @notifee/react-native (https://notifee.app/)
-* Armazenamento Local: @react-native-async-storage/async-storage
-* Manipulação de Datas: Moment.js
+* React Native 0.81 + Expo SDK 54 (Expo Router, Dev Client)
+* @notifee/react-native (alarmes e notificações)
+* Config plugin próprio em `plugins/withHoraCertaAlarm.js` (canal de alarme nativo, som e tela sobre o bloqueio)
+* Módulo nativo local em `modules/alarm-device` (permissão de tela cheia, volume do alarme)
+* AsyncStorage, Moment.js
+
+> O app usa código nativo (notifee + plugin), então **não funciona no Expo Go**. Use um build (development ou preview).
 
 --------------------------------------------------------------------------------
-📦 COMO INSTALAR E EXECUTAR O PROJETO LOCALMENTE
+📦 RODANDO LOCALMENTE
 --------------------------------------------------------------------------------
 
-### Pré-requisitos
-- Node.js instalado
-- Ambiente React Native/Expo configurado (Android Studio ou dispositivo físico Android)
-- EAS CLI instalado globalmente (npm install -g eas-cli)
+Pré-requisitos: Node.js 20.19+ e Android Studio (ou um celular Android com depuração USB).
 
-### Passo a Passo
+```bash
+npm install
+npx expo run:android      # gera o app nativo, instala e inicia o Metro
+```
 
-1. Clone o repositório:
-   git clone https://github.com/seu-usuario/PMG-Hora_Certa.git
-   cd PMG-Hora_Certa
+Depois da primeira vez, basta `npx expo start` com o app de desenvolvimento instalado.
 
-2. Instale as dependências do projeto:
-   npm install
+Sempre que mudar `app.json`, ícones, sons ou o plugin, gere o app nativo de novo (`npx expo run:android` ou um novo build EAS).
 
-3. Inicie o Metro Bundler (servidor de desenvolvimento):
-   npx expo start
+### Testes
 
-4. Execute o cliente de desenvolvimento nativo (Android):
-   npx expo run:android
+```bash
+npm test     # regras de horário, agrupamento de alarmes e migração dos dados
+npm run lint
+```
 
 --------------------------------------------------------------------------------
-📱 COMO GERAR A BUILD DE TESTES (.APK) VIA EAS
+📱 GERANDO O APK (EAS)
 --------------------------------------------------------------------------------
 
-O projeto está configurado para realizar compilações nativas diretamente na nuvem do Expo (EAS Build). Para gerar um ficheiro .apk instalável para testes em outros dispositivos:
+```bash
+eas build --platform android --profile preview
+```
 
-1. Certifique-se de que o campo "slug" no seu ficheiro app.json está em letras minúsculas e sem espaços (ex: "hora-certa").
-2. Execute o comando no terminal:
-   eas build --platform android --profile preview
-3. Aguarde a finalização do processo na nuvem. O terminal exibirá um QR Code e um link direto para download do ficheiro .apk.
+Use o perfil **preview** para instalar no celular do paciente. O perfil `development` gera um app de desenvolvimento, que abre a tela do Expo pedindo um servidor.
+
+Depois de instalar, abra a aba **Ajustes**, corrija o que estiver em vermelho e use **Testar o alarme** com a tela bloqueada.
 
 --------------------------------------------------------------------------------
 📄 LICENÇA
 --------------------------------------------------------------------------------
 
-Este projeto está sob a licença MIT. Veja o arquivo LICENSE para mais detalhes.
+Este projeto está sob a licença MIT.

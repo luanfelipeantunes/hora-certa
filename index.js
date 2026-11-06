@@ -1,22 +1,10 @@
-import notifee, { EventType } from '@notifee/react-native';
-import { registerRootComponent } from 'expo';
-import { ExpoRoot } from 'expo-router';
+// Ponto de entrada do app.
+// O handler de eventos em segundo plano do notifee precisa ser registrado antes do app
+// ser montado, por isso fica aqui e não dentro de um componente.
+import notifee from "@notifee/react-native";
+import { handleBackgroundEvent } from "./utils/backgroundEvents";
 
-// --- INÍCIO DO MOCK DO NOTIFEE ---
-// let notifee;
-// let EventType = { DELIVERED: 0 };
-// notifee = { onBackgroundEvent: async () => { } };
-// --- FIM DO MOCK DO NOTIFEE ---
+notifee.onBackgroundEvent(handleBackgroundEvent);
 
-notifee.onBackgroundEvent(async ({ type, detail }) => {
-  if (type === EventType.DELIVERED) {
-    console.log("Alarme disparou em background!", detail.notification);
-  }
-});
-
-export function App() {
-  const ctx = require.context('./app');
-  return <ExpoRoot context={ctx} />;
-}
-
-registerRootComponent(App);
+// eslint-disable-next-line import/first
+import "expo-router/entry";

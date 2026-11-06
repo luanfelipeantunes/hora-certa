@@ -1,0 +1,14 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="expo.modules.alarmdevice" >
+4
+5    <uses-sdk android:minSdkVersion="24" />
+6
+7    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+7-->/home/hmt-35/hora-certa/modules/alarm-device/android/src/main/AndroidManifest.xml:2:5-94
+7-->/home/hmt-35/hora-certa/modules/alarm-device/android/src/main/AndroidManifest.xml:2:22-92
+8    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+8-->/home/hmt-35/hora-certa/modules/alarm-device/android/src/main/AndroidManifest.xml:3:5-80
+8-->/home/hmt-35/hora-certa/modules/alarm-device/android/src/main/AndroidManifest.xml:3:22-78
+9
+10</manifest>

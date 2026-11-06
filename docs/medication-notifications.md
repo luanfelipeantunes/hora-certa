@@ -1,283 +1,58 @@
-# Sistema de alarme e notificacoes de medicamentos
+# Sistema de alarme dos remédios
 
-Este arquivo documenta como o sistema de notificacoes/alarme de medicamentos funciona no app, com foco no comportamento hibrido entre Android e iOS.
+Como o Hora Certa agenda, toca e confirma os alarmes. Arquivos principais:
 
-## Visao geral
+| Arquivo | Papel |
+| --- | --- |
+| `utils/schedule.ts` | Regras de horário (funções puras, cobertas por testes) |
+| `utils/alarms.ts` | Integração com o notifee: agendar, sincronizar, ler alarmes tocando, permissões |
+| `utils/medicationActions.ts` | Ações do usuário (salvar, excluir, "Já tomei", adiar) + reagendamento |
+| `utils/storage.ts` / `utils/normalize.ts` | Persistência no AsyncStorage e migração do formato antigo |
+| `utils/backgroundEvents.ts` + `index.js` | Eventos com o app fechado |
+| `components/AlarmWatcher.tsx` | Abre a tela de alerta quando um alarme toca |
+| `app/alarm.tsx` | Tela de alerta ("JÁ TOMEI" / "Lembrar em 10 minutos") |
+| `plugins/withHoraCertaAlarm.js` | Código nativo Android (canal com som de alarme, tela sobre o bloqueio) |
+| `modules/alarm-device` | Módulo nativo (Kotlin): permissão de tela cheia, volume do alarme, pedido de bateria |
 
-O fluxo atual usa `@notifee/react-native` para agendar, receber e reagir a notificacoes de medicamentos.
+## Regras de horário
 
-A ideia e simples:
+- **Grade fixa**: "a cada 8 horas a partir de 08:00" gera 08:00, 16:00, 00:00... Confirmar com atraso não empurra os próximos horários.
+- **Duração**: `startDate + startTime + duration dias` (fim exclusivo). 7 dias de 8 em 8 horas = 21 doses.
+- **Uso contínuo**: `duration: null`, sem data de fim.
+- **Doses confirmadas** ficam em `takenDoses` (horário previsto, `"YYYY-MM-DD HH:mm"`); o histórico guarda 60 dias.
 
-- no Android, o app se comporta como um alarme real, com notificacao de alta prioridade, acendimento da tela e abertura em primeiro plano quando possivel;
-- no iOS, o app respeita o modelo nativo de notificacoes, exibindo alerta visual e sonoro, sem forcar abertura imediata do app.
+## Agendamento
 
-A rota de destino para a interacao com o alerta e sempre `/alertScreen`, levando o `medicationId` para que a tela saiba qual medicamento esta sendo tratado.
+1. Doses do mesmo horário viram **um único alarme** (um som, uma tela com todos os remédios).
+2. Só os **próximos 120 horários** (48 no iOS) ficam agendados. O Android permite no máximo 500 alarmes por app e o iOS 64 notificações pendentes; a versão anterior agendava o tratamento inteiro (ex.: de hora em hora por 30 dias = 720 alarmes), estourava o limite e passava a recusar qualquer cadastro novo.
+3. A sincronização (`syncAlarms`) compara o que está agendado no sistema com o que deveria estar e só cancela/cria a diferença. Isso também apaga alarmes "órfãos" (de remédios excluídos ou deixados pela versão antiga).
+4. A agenda é completada ao abrir o app, ao voltar para ele, quando um alarme toca (inclusive com o app fechado) e sempre que algo é salvo.
+5. O gatilho usa `AlarmType.SET_ALARM_CLOCK`, o tipo mais confiável do Android (funciona no modo soneca/Doze).
 
-## Arquivos envolvidos
+## Como o alarme toca (Android)
 
-- [utils/MedicationNotifications.ts](/home/hmt-35/PMG-Hora_Certa/utils/MedicationNotifications.ts)
-- [app/_layout.tsx](/home/hmt-35/PMG-Hora_Certa/app/_layout.tsx)
+- Canal `hora-certa-alarm-v1`, criado no código nativo pelo plugin com `AudioAttributes.USAGE_ALARM`: o som segue o **volume de alarme** e toca mesmo com o celular no silencioso. (O notifee só cria canais com som de notificação, que fica mudo no silencioso.)
+- Som próprio (`assets/sounds/hora_certa_alarm.wav`), repetido até a confirmação (`loopSound`), notificação fixa (`ongoing`), categoria `ALARM`.
+- `fullScreenAction` + `showWhenLocked`/`turnScreenOn` na MainActivity: o celular acende e abre a tela de alerta por cima da tela de bloqueio.
+- **Android 14+**: a permissão "notificação em tela cheia" pode vir negada (principalmente em APK instalado fora da Play Store). Sem ela o celular toca, mas a tela do remédio não abre sozinha. A aba Ajustes detecta isso (`modules/alarm-device`) e leva direto à tela de permissão.
+- `lightUpScreen` só é usado quando a tela cheia **não** está permitida: acender a tela antes faz o Android, em celulares sem bloqueio de tela, mostrar só um aviso no topo em vez de abrir o alerta.
 
-## O que cada parte faz
+No iOS o alarme é uma notificação com som (`interruptionLevel: timeSensitive`); o sistema não permite abrir o app sozinho.
 
-### 1. `MEDICATION_DATETIME_FORMAT`
+## Tela de alerta
 
-Define o formato padrao usado para salvar e comparar datas e horas do medicamento.
+- Mostra todos os remédios dos alarmes que estão tocando (um por remédio, sempre a dose mais recente, para nunca sugerir duas doses juntas).
+- **JÁ TOMEI**: para o som, marca as doses como tomadas e reagenda.
+- **Lembrar em 10 minutos**: para o som e cria um alarme adiado (`alarm-snoozes` no armazenamento), que sobrevive à sincronização.
+- O botão "voltar" do Android fica bloqueado enquanto o alarme toca.
 
-Exemplo:
+## Diagnóstico (aba Ajustes)
 
-- `2026-05-29 08:00`
+Verifica notificações, "Alarmes e lembretes" (alarme exato), alarme em tela cheia, economia de bateria, volume do alarme e o gerenciador de energia do fabricante, com botões para corrigir. O botão **Testar o alarme** faz o alarme tocar em 10 segundos.
 
-Esse formato e usado para:
+## Dados salvos (AsyncStorage)
 
-- calcular o proximo horario;
-- salvar `lastUse`;
-- registrar a ocorrencia que disparou a notificacao.
+- `medications`: lista de remédios (`types/medication.ts`).
+- `alarm-snoozes`: alarmes adiados.
 
-### 2. `MEDICATION_NOTIFICATION_CHANNEL_ID`
-
-Identificador fixo do canal de notificacoes no Android.
-
-Ele e importante porque:
-
-- o Android precisa de um canal para controlar importancia, som e comportamento visual;
-- uma vez criado, o canal passa a ser a referencia para todas as notificacoes de medicamentos.
-
-### 3. `ensureNotificationChannel()`
-
-Funcao responsavel por criar o canal no Android antes de agendar notificacoes.
-
-Comportamento atual:
-
-- roda somente em Android;
-- cria o canal `medication-reminders`;
-- define `AndroidImportance.HIGH` para dar destaque;
-- habilita som e vibracao.
-
-Na pratica, isso prepara o terreno para que o alerta tenha comportamento forte no Android.
-
-### 4. `getMedicationWindowEnd(medication)`
-
-Calcula ate quando um medicamento ainda deve gerar ocorrencias.
-
-Ela pega:
-
-- `startDate`;
-- `duration`.
-
-Depois soma a duracao em dias e fecha no fim do dia.
-
-Isso evita agendar notificacoes fora da janela valida do tratamento.
-
-### 5. `getMedicationBaseOccurrence(medication)`
-
-Determina a primeira ocorrencia valida do medicamento.
-
-A logica considera:
-
-- `startDate` + `startTime` como ponto inicial;
-- `lastUse`, quando existe, para continuar a sequencia a partir da ultima toma registrada;
-- `periodicity.recurrency` e `periodicity.unit` para calcular a repeticao.
-
-Se faltarem dados essenciais, a funcao retorna `null`.
-
-### 6. `getMedicationOccurrences(medication, reference)`
-
-Gera todas as ocorrencias futuras validas do medicamento dentro da janela de tratamento.
-
-A funcao faz duas coisas:
-
-- avanca a primeira ocorrencia ate ficar no presente ou no futuro;
-- adiciona sucessivas ocorrencias ate chegar ao fim da janela.
-
-O resultado e uma lista de momentos em que o alerta deve disparar.
-
-### 7. `getNextMedication(storedMedications)`
-
-Encontra a proxima ocorrencia global entre todos os medicamentos salvos.
-
-Ela:
-
-- percorre todos os medicamentos;
-- calcula suas ocorrencias futuras;
-- ordena pelo horario mais proximo;
-- retorna o primeiro resultado.
-
-Essa funcao e util para telas de resumo ou widgets que precisem mostrar "o proximo remdio".
-
-### 8. `cancelMedicationNotifications(medication)`
-
-Cancela notificacoes previamente agendadas para um medicamento.
-
-Ela procura os IDs salvos em:
-
-- `notificationIds`;
-- ou `notificationId`, para compatibilidade com registros antigos.
-
-Depois cancela cada uma via Notifee.
-
-Esse passo evita duplicar alarmes quando o usuario edita o medicamento ou quando o sistema sincroniza tudo de novo.
-
-### 9. `scheduleMedicationOccurrence(medication, occurrence)`
-
-Essa e a parte central do agendamento.
-
-Ela monta a notificacao com dados compartilhados entre Android e iOS e dispara o agendamento com trigger por timestamp.
-
-#### No Android
-
-O bloco `android` define o comportamento de alarme:
-
-- `channelId`: usa o canal de medicamentos;
-- `category: AndroidCategory.ALARM`: classifica como alarme;
-- `pressAction`: define a acao ao tocar na notificacao;
-- `fullScreenAction`: habilita abertura em tela cheia, usada em cenarios de alerta forte;
-- `ongoing: true`: ajuda a tratar como alerta persistente;
-- `sound: "default"`: garante som padrao do sistema.
-
-O `alarmManager: true` no trigger reforca que o Android deve tratar a notificacao como alarme de alta prioridade.
-
-#### No iOS
-
-O bloco `ios` usa:
-
-- `interruptionLevel: "timeSensitive"`;
-- `sound: "default"`.
-
-Isso faz com que a notificacao seja tratada como relevante, mas ainda respeite as regras do iPhone e do iPad. O app nao tenta forcar abertura da tela, porque o iOS nao permite esse comportamento como o Android.
-
-#### Dados salvos na notificacao
-
-Cada alerta carrega `data` com:
-
-- `medicationId`;
-- `medicationOccurrence`.
-
-Esses dados sao o elo entre o disparo da notificacao e a tela de alerta.
-
-### 10. `syncMedicationNotifications(medications)`
-
-Essa funcao sincroniza tudo de uma vez.
-
-Fluxo:
-
-- cancela notificacoes antigas de cada medicamento;
-- recalcula as ocorrencias futuras;
-- agenda todas as notificacoes novas;
-- salva de volta em cada medicamento:
-  - `notificationId`;
-  - `notificationIds`.
-
-Ela e importante porque mantem o estado persistido coerente com o que foi realmente agendado no sistema operacional.
-
-### 11. `markMedicationAsTaken(medications, medicationId)`
-
-Atualiza o medicamento marcado como tomado.
-
-Ela:
-
-- encontra o item com o `id` correspondente;
-- grava `lastUse` com o horario atual.
-
-Depois disso, a proxima sincronizacao passa a calcular as ocorrencias a partir dessa nova tomada.
-
-## Como o fluxo funciona no app
-
-### 1. Inicializacao do app
-
-Em [app/_layout.tsx](/home/hmt-35/PMG-Hora_Certa/app/_layout.tsx), o layout raiz faz a preparacao inicial:
-
-- pede permissao de notificacao com `notifee.requestPermission()`;
-- carrega a lista de medicamentos do `AsyncStorage`;
-- chama `syncMedicationNotifications()`;
-- salva de volta a lista atualizada com os IDs de notificacao.
-
-Isso significa que, sempre que o app abre, o sistema de alarmes e revalidado.
-
-### 2. Interacao com notificacoes em primeiro plano
-
-Quando o app esta aberto, `notifee.onForegroundEvent()` escuta o evento de toque na notificacao.
-
-Se o usuario tocar no alerta, o app:
-
-- le `medicationId` de `detail.notification.data`;
-- navega para `/alertScreen`.
-
-### 3. Interacao com notificacoes em segundo plano
-
-Quando o app nao esta em primeiro plano, `notifee.onBackgroundEvent()` faz o mesmo trabalho.
-
-Ele garante que, ao tocar no alerta, o usuario continue sendo levado para a tela certa quando o sistema permitir a retomada do app.
-
-### 4. Abertura inicial do app pela notificacao
-
-Se o usuario abrir o app a partir da notificacao, `notifee.getInitialNotification()` recupera a interacao inicial e redireciona para `/alertScreen`.
-
-Isso cobre o caso em que o app foi aberto diretamente pelo alerta.
-
-## Diferença entre Android e iOS
-
-### Android
-
-Objetivo: agir como alarme real.
-
-Resultado esperado:
-
-- alerta com prioridade alta;
-- canal dedicado;
-- som;
-- possibilidade de tela cheia;
-- comportamento mais agressivo para chamar atenção.
-
-### iOS
-
-Objetivo: seguir o modelo nativo do sistema.
-
-Resultado esperado:
-
-- notificacao visivel;
-- som;
-- `timeSensitive` para aumentar a relevancia;
-- sem tentativa de abrir o app automaticamente.
-
-## Dados importantes persistidos
-
-Cada medicamento pode guardar os seguintes campos relacionados a notificacao:
-
-- `notificationId`;
-- `notificationIds`;
-- `lastUse`.
-
-Esses campos permitem:
-
-- cancelar o que ja foi agendado;
-- reagendar corretamente;
-- recalcular o proximo horario com base no uso real.
-
-## Resumo do fluxo
-
-1. O app abre.
-2. O layout pede permissao e sincroniza os medicamentos.
-3. O arquivo de notificacoes calcula as ocorrencias futuras.
-4. O Notifee agenda os alarmes.
-5. Quando chega o horario:
-   - Android trata como alarme forte;
-   - iOS exibe alerta tradicional.
-6. Ao tocar no alerta, o app vai para `/alertScreen` com o `medicationId`.
-
-## Observacoes importantes
-
-- O canal Android e criado somente uma vez no fluxo de agendamento.
-- A sincronizacao cancela notificacoes antigas antes de criar novas, evitando duplicidade.
-- O uso de `medicationOccurrence` no payload ajuda a rastrear qual disparo especifico ocorreu.
-- Se o app tiver rotinas de edicao de medicamento, e importante chamar `syncMedicationNotifications()` depois de salvar as alteracoes.
-
-## Possivel evolucao futura
-
-Se quiser deixar esse sistema ainda mais robusto, os proximos passos naturais seriam:
-
-- criar tipos TypeScript para o modelo de medicamento;
-- centralizar o acesso ao `AsyncStorage` num service unico;
-- separar a logica de agendamento da logica de persistencia;
-- registrar logs de falha para agendamento e cancelamento;
-- adicionar uma tela de diagnostico para confirmar permissao, canal e proxima ocorrencia.
+Ao abrir, o app regrava os dados no formato atual (`normalizeMedication`), então registros da versão anterior continuam funcionando.

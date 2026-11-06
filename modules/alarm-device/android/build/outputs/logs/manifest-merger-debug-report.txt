@@ -1,0 +1,24 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /home/hmt-35/hora-certa/modules/alarm-device/android/src/main/AndroidManifest.xml:1:1-4:12
+INJECTED from /home/hmt-35/hora-certa/modules/alarm-device/android/src/main/AndroidManifest.xml:1:1-4:12
+	package
+		INJECTED from /home/hmt-35/hora-certa/modules/alarm-device/android/src/main/AndroidManifest.xml
+	xmlns:android
+		ADDED from /home/hmt-35/hora-certa/modules/alarm-device/android/src/main/AndroidManifest.xml:1:11-69
+uses-permission#android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+ADDED from /home/hmt-35/hora-certa/modules/alarm-device/android/src/main/AndroidManifest.xml:2:5-94
+	android:name
+		ADDED from /home/hmt-35/hora-certa/modules/alarm-device/android/src/main/AndroidManifest.xml:2:22-92
+uses-permission#android.permission.USE_FULL_SCREEN_INTENT
+ADDED from /home/hmt-35/hora-certa/modules/alarm-device/android/src/main/AndroidManifest.xml:3:5-80
+	android:name
+		ADDED from /home/hmt-35/hora-certa/modules/alarm-device/android/src/main/AndroidManifest.xml:3:22-78
+uses-sdk
+INJECTED from /home/hmt-35/hora-certa/modules/alarm-device/android/src/main/AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from /home/hmt-35/hora-certa/modules/alarm-device/android/src/main/AndroidManifest.xml
+INJECTED from /home/hmt-35/hora-certa/modules/alarm-device/android/src/main/AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from /home/hmt-35/hora-certa/modules/alarm-device/android/src/main/AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from /home/hmt-35/hora-certa/modules/alarm-device/android/src/main/AndroidManifest.xml
